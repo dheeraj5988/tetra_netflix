@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getEmailAccount } from "@/lib/email-db";
+import { fetchLatestCodeFromIMAP } from "@/lib/imap-email";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -22,27 +24,29 @@ export async function POST(req: Request) {
       );
     }
 
-    let fetchLatestCodeFromSender: any;
-    try {
-      const mod = await import("../../../lib/gmail");
-      fetchLatestCodeFromSender = mod.fetchLatestCodeFromSender;
-      if (!fetchLatestCodeFromSender) {
-        throw new Error("fetchLatestCodeFromSender not exported");
-      }
-    } catch (impErr: any) {
-      console.error("Import error:", impErr);
-      const msg = isDev ? String(impErr?.message || impErr) : "Failed to load email service";
+    // Check if email exists in database
+    const account = getEmailAccount(email);
+    if (!account) {
       return NextResponse.json(
-        { success: false, message: msg },
-        { status: 500 }
+        {
+          success: false,
+          message: "This email address is not registered in our system. Please contact administrator to add your email.",
+        },
+        { status: 403 }
       );
     }
 
-    const result = await fetchLatestCodeFromSender({
-      to: email,
-      subjectQuery: body?.subjectQuery || "",
-      codeRegex: body?.codeRegex ? new RegExp(body.codeRegex, "i") : undefined,
-    });
+    // Fetch code using IMAP with timeout
+    const result = await Promise.race([
+      fetchLatestCodeFromIMAP(account, {
+        to: email,
+        subjectQuery: body?.subjectQuery || "",
+        codeRegex: body?.codeRegex ? new RegExp(body.codeRegex, "i") : undefined,
+      }),
+      new Promise<null>((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout - email search took too long')), 30000)
+      )
+    ]) as any;
 
     if (!result) {
       return NextResponse.json(

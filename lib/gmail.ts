@@ -1,18 +1,20 @@
 import { google } from "googleapis";
 
-const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
-const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
-const REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN || "";
-const USER = process.env.GMAIL_USER || "me";
+function getGmailClient() {
+  const CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
+  const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
+  const REFRESH_TOKEN = process.env.GMAIL_REFRESH_TOKEN || "";
+  const USER = process.env.GMAIL_USER || "me";
 
-if (!CLIENT_ID || !CLIENT_SECRET || !REFRESH_TOKEN) {
-  throw new Error("Missing Google OAuth environment variables (GOOGLE_CLIENT_ID/SECRET or GMAIL_REFRESH_TOKEN)");
+  if (!CLIENT_ID || !CLIENT_SECRET || !REFRESH_TOKEN) {
+    throw new Error("Missing Google OAuth environment variables (GOOGLE_CLIENT_ID/SECRET or GMAIL_REFRESH_TOKEN)");
+  }
+
+  const oAuth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET);
+  oAuth2Client.setCredentials({ refresh_token: REFRESH_TOKEN });
+
+  return { gmail: google.gmail({ version: "v1", auth: oAuth2Client }), user: USER };
 }
-
-const oAuth2Client = new google.auth.OAuth2(CLIENT_ID, CLIENT_SECRET);
-oAuth2Client.setCredentials({ refresh_token: REFRESH_TOKEN });
-
-const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
 
 function decodeBase64Url(str: string) {
   const replaced = str.replace(/-/g, "+").replace(/_/g, "/");
@@ -40,6 +42,7 @@ export async function fetchLatestCodeFromSender(opts: {
   subjectQuery?: string;
   codeRegex?: RegExp;
 }) {
+  const { gmail, user } = getGmailClient();
   const { from, to, subjectQuery = "", codeRegex = /\b\d{4,8}\b/ } = opts;
   const qParts: string[] = [];
   if (from) qParts.push(`from:${from}`);
@@ -48,7 +51,7 @@ export async function fetchLatestCodeFromSender(opts: {
   const q = qParts.join(" ");
 
   const listRes = await gmail.users.messages.list({
-    userId: USER,
+    userId: user,
     q,
     maxResults: 10,
   });
@@ -56,7 +59,7 @@ export async function fetchLatestCodeFromSender(opts: {
   const messages = listRes.data.messages || [];
   for (const m of messages) {
     const msg = await gmail.users.messages.get({
-      userId: USER,
+      userId: user,
       id: m.id!,
       format: "full",
     });

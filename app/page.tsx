@@ -178,7 +178,7 @@ export default function Home() {
                 onClick={handleApproveLink}
                 className="w-full bg-purple-600 hover:bg-purple-700 text-white py-2 font-semibold"
               >
-                ��� Approve Update
+                Open Approve Update
               </Button>
               <p className="text-xs text-purple-600">This will open the Netflix verification link in a new tab.</p>
             </div>
